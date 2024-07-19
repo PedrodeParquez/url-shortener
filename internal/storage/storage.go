@@ -6,5 +6,5 @@ import (
 
 var (
 	ErrURLNotFound = errors.New("url not found")
-	ErrURLExist    = errors.New("url exists")
+	ErrURLExists   = errors.New("url exists")
 )
