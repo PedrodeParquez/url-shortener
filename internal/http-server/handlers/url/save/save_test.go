@@ -65,13 +65,20 @@ func TestSaveHandler(t *testing.T) {
 
 			if tc.respError == "" || tc.mockError != nil {
 				urlSaverMock.On("SaveURL", tc.url, mock.AnythingOfType("string")).
-					Return(int64(1), tc.mockError).
+					Return(tc.mockError).
 					Once()
 			}
 
 			handler := save.New(slogdiscard.NewDiscardLogger(), urlSaverMock)
 
 			input := fmt.Sprintf(`{"url": "%s", "alias": "%s"}`, tc.url, tc.alias)
+			if tc.url == "" && tc.alias == "" {
+				input = `{}`
+			} else if tc.url == "" {
+				input = fmt.Sprintf(`{"alias": "%s"}`, tc.alias)
+			} else if tc.alias == "" {
+				input = fmt.Sprintf(`{"url": "%s"}`, tc.url)
+			}
 
 			req, err := http.NewRequest(http.MethodPost, "/save", bytes.NewReader([]byte(input)))
 			require.NoError(t, err)
@@ -82,6 +89,7 @@ func TestSaveHandler(t *testing.T) {
 			require.Equal(t, rr.Code, http.StatusOK)
 
 			body := rr.Body.String()
+			fmt.Println("Response body:", body)
 
 			var resp save.Response
 

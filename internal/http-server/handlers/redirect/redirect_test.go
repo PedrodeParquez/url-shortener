@@ -47,7 +47,6 @@ func TestSaveHandler(t *testing.T) {
 			redirectedToURL, err := api.GetRedirect(ts.URL + "/" + tc.alias)
 			require.NoError(t, err)
 
-			// Check the final URL after redirection.
 			assert.Equal(t, tc.url, redirectedToURL)
 		})
 	}

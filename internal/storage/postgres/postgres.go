@@ -50,14 +50,14 @@ func New(storagePath string) (*Storage, error) {
 }
 
 func (s *Storage) SaveURL(urlToSave string, alias string) error {
-	const op = "storage.sqlite.SaveURL"
+	const op = "storage.postgresql.SaveURL"
 
-	stnt, err := s.db.Prepare("INSERT INTO url(url, alias) VALUES($1, $2)")
+	stmt, err := s.db.Prepare("INSERT INTO url(url, alias) VALUES($1, $2)")
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	_, err = stnt.Exec(urlToSave, alias)
+	_, err = stmt.Exec(urlToSave, alias)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code.Name() == "unique_violation" {
 			return fmt.Errorf("%s: %w", op, storage.ErrURLExists)
@@ -70,16 +70,16 @@ func (s *Storage) SaveURL(urlToSave string, alias string) error {
 }
 
 func (s *Storage) GetURL(alias string) (string, error) {
-	const op = "storage.sqlite.GetURL"
+	const op = "storage.postgresql.GetURL"
 
-	stnt, err := s.db.Prepare("SELECT url FROM url WHERE alias = $1")
+	stmt, err := s.db.Prepare("SELECT url FROM url WHERE alias = $1")
 	if err != nil {
 		return "", fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
 
 	var resURL string
 
-	err = stnt.QueryRow(alias).Scan(&resURL)
+	err = stmt.QueryRow(alias).Scan(&resURL)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", storage.ErrURLNotFound
 	}
@@ -90,8 +90,27 @@ func (s *Storage) GetURL(alias string) (string, error) {
 	return resURL, nil
 }
 
-/* TODO: add func DeleteURL
-func (s *Storage) DeleteURL(alias string) error {
+func (s *Storage) DeleteAlias(alias string) error {
+	const op = "storage.postgresql.DeleteAlias"
 
+	stmt, err := s.db.Prepare("DELETE FROM url WHERE alias = $1")
+	if err != nil {
+		return fmt.Errorf("%s: prepare statement: %w", op, err)
+	}
+
+	res, err := stmt.Exec(alias)
+	if err != nil {
+		return fmt.Errorf("%s: execute statement: %w", op, err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: get affected rows: %w", op, err)
+	}
+
+	if rowsAffected == 0 {
+		return storage.ErrURLNotFound
+	}
+
+	return nil
 }
-*/
