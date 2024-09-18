@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	host = "localhost:8082"
+	host = "localhost:8080"
 )
 
 func TestURLShortener_HappyPath(t *testing.T) {
@@ -25,19 +25,18 @@ func TestURLShortener_HappyPath(t *testing.T) {
 	}
 	e := httpexpect.Default(t, u.String())
 
-	e.POST("/url").
+	e.POST("/url/save").
 		WithJSON(save.Request{
 			URL:   gofakeit.URL(),
 			Alias: random.NewRandomString(10),
 		}).
-		WithBasicAuth("myuser", "mypass").
+		WithBasicAuth("pedro", "d123").
 		Expect().
 		Status(200).
 		JSON().Object().
 		ContainsKey("alias")
 }
 
-//nolint:funlen
 func TestURLShortener_SaveRedirect(t *testing.T) {
 	testCases := []struct {
 		name  string
@@ -61,7 +60,6 @@ func TestURLShortener_SaveRedirect(t *testing.T) {
 			url:   gofakeit.URL(),
 			alias: "",
 		},
-		// TODO: add more test cases
 	}
 
 	for _, tc := range testCases {
@@ -73,14 +71,12 @@ func TestURLShortener_SaveRedirect(t *testing.T) {
 
 			e := httpexpect.Default(t, u.String())
 
-			// Save
-
-			resp := e.POST("/url").
+			resp := e.POST("/url/save").
 				WithJSON(save.Request{
 					URL:   tc.url,
 					Alias: tc.alias,
 				}).
-				WithBasicAuth("myuser", "mypass").
+				WithBasicAuth("pedro", "d123").
 				Expect().Status(http.StatusOK).
 				JSON().Object()
 
@@ -101,8 +97,6 @@ func TestURLShortener_SaveRedirect(t *testing.T) {
 
 				alias = resp.Value("alias").String().Raw()
 			}
-
-			// Redirect
 
 			testRedirect(t, alias, tc.url)
 		})

@@ -23,12 +23,12 @@ type Response struct {
 	Message string `json:"message,omitempty"`
 }
 
-//go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=aliasRemover
-type aliasRemover interface {
+//go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=AliasRemover
+type AliasRemover interface {
 	DeleteAlias(alias string) error
 }
 
-func Delete(log *slog.Logger, aliasRemover aliasRemover) http.HandlerFunc {
+func Delete(log *slog.Logger, aliasRemover AliasRemover) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.url.delete"
 
@@ -49,6 +49,11 @@ func Delete(log *slog.Logger, aliasRemover aliasRemover) http.HandlerFunc {
 		}
 
 		log.Info("request body decoded", slog.Any("request", req))
+
+		if req.Alias == "" {
+			render.JSON(w, r, resp.Error("invalid request"))
+			return
+		}
 
 		validate := validator.New()
 		validate.RegisterValidation("alias", validateAlias)
