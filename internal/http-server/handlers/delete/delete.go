@@ -9,8 +9,7 @@ import (
 	"url-shortener/internal/lib/logger/sl"
 	"url-shortener/internal/storage"
 
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
+	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -28,30 +27,27 @@ type AliasRemover interface {
 	DeleteAlias(alias string) error
 }
 
-func Delete(log *slog.Logger, aliasRemover AliasRemover) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func Delete(log *slog.Logger, aliasRemover AliasRemover) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		const op = "handlers.url.delete"
 
 		log = log.With(
 			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", c.GetHeader("X-Request-Id")),
 		)
 
 		var req Request
 
-		err := render.DecodeJSON(r.Body, &req)
-		if err != nil {
+		if err := c.ShouldBindJSON(&req); err != nil {
 			log.Error("failed to decode request body", sl.Err(err))
-
-			render.JSON(w, r, resp.Error("failed to decode request"))
-
+			c.JSON(http.StatusBadRequest, resp.Error("failed to decode request"))
 			return
 		}
 
 		log.Info("request body decoded", slog.Any("request", req))
 
 		if req.Alias == "" {
-			render.JSON(w, r, resp.Error("invalid request"))
+			c.JSON(http.StatusBadRequest, resp.Error("invalid request"))
 			return
 		}
 
@@ -62,31 +58,28 @@ func Delete(log *slog.Logger, aliasRemover AliasRemover) http.HandlerFunc {
 			validateErr := err.(validator.ValidationErrors)
 
 			log.Error("invalid request", sl.Err(err))
-
-			render.JSON(w, r, resp.ValidationError(validateErr))
-
+			c.JSON(http.StatusBadRequest, resp.ValidationError(validateErr))
 			return
 		}
 
-		err = aliasRemover.DeleteAlias(req.Alias)
+		err := aliasRemover.DeleteAlias(req.Alias)
 		if errors.Is(err, storage.ErrURLNotFound) {
 			log.Info("alias not found", slog.String("alias", req.Alias))
-
-			render.JSON(w, r, resp.Error("alias not found"))
-
+			c.JSON(http.StatusNotFound, resp.Error("alias not found"))
+			return
+		}
+		if errors.Is(err, storage.ErrDBConnection) {
+			log.Error("database connection error", sl.Err(err))
+			c.JSON(http.StatusBadRequest, resp.Error("invalid request"))
 			return
 		}
 		if err != nil {
 			log.Error("failed to delete alias", sl.Err(err))
-
-			render.JSON(w, r, resp.Error("failed to delete alias"))
-
+			c.JSON(http.StatusInternalServerError, resp.Error("failed to delete alias"))
 			return
 		}
-
 		log.Info("alias deleted")
-
-		render.JSON(w, r, Response{
+		c.JSON(http.StatusOK, Response{
 			Response: resp.OK(),
 			Message:  "alias deleted",
 		})

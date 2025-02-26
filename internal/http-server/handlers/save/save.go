@@ -4,13 +4,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"url-shortener/internal/config"
 	resp "url-shortener/internal/lib/api/response"
 	"url-shortener/internal/lib/logger/sl"
 	"url-shortener/internal/lib/random"
 	"url-shortener/internal/storage"
 
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
+	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -24,70 +24,58 @@ type Response struct {
 	Alias string `json:"alias,omitempty"`
 }
 
-// TODO: move in config
-const aliasLength = 8
-
 //go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=URLSaver
 type URLSaver interface {
 	SaveURL(urlToSave string, alias string) error
 }
 
-func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func New(log *slog.Logger, urlSaver URLSaver, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		const op = "handlers.url.save.New"
 
 		log = log.With(
 			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", c.Request.Header.Get("X-Request-Id")),
 		)
 
 		var req Request
 
-		err := render.DecodeJSON(r.Body, &req)
-		if err != nil {
+		if err := c.ShouldBindJSON(&req); err != nil {
 			log.Error("failed to decode request body", sl.Err(err))
-
-			render.JSON(w, r, resp.Error("failed to decode request"))
-
+			c.JSON(http.StatusBadRequest, resp.Error("failed to decode request"))
 			return
 		}
 
 		log.Info("request body decoded", slog.Any("request", req))
 
-		if err := validator.New().Struct(req); err != nil {
+		validate := validator.New()
+		if err := validate.Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
-
 			log.Error("invalid request", sl.Err(err))
-
-			render.JSON(w, r, resp.ValidationError(validateErr))
-
+			c.JSON(http.StatusBadRequest, resp.ValidationError(validateErr))
 			return
 		}
 
 		alias := req.Alias
 		if alias == "" {
-			alias = random.NewRandomString(aliasLength)
+			alias = random.NewRandomString(cfg.AliasLength)
 		}
 
-		err = urlSaver.SaveURL(req.URL, alias)
+		err := urlSaver.SaveURL(req.URL, alias)
 		if errors.Is(err, storage.ErrURLExists) {
 			log.Info("url already exists", slog.String("url", req.URL))
-
-			render.JSON(w, r, resp.Error("url already exists"))
-
+			c.JSON(http.StatusConflict, resp.Error("url already exists"))
 			return
 		}
 		if err != nil {
 			log.Error("failed to add url", sl.Err(err))
-
-			render.JSON(w, r, resp.Error("failed to add url"))
-
+			c.JSON(http.StatusInternalServerError, resp.Error("failed to add url"))
 			return
 		}
 
 		log.Info("url added")
 
-		render.JSON(w, r, Response{
+		c.JSON(http.StatusOK, Response{
 			Response: resp.OK(),
 			Alias:    alias,
 		})

@@ -7,14 +7,12 @@ import (
 	"url-shortener/internal/config"
 	"url-shortener/internal/http-server/handlers/delete"
 	"url-shortener/internal/http-server/handlers/redirect"
-	"url-shortener/internal/http-server/handlers/url/save"
-	mwLogger "url-shortener/internal/http-server/middleware/logger"
+	"url-shortener/internal/http-server/handlers/save"
 	"url-shortener/internal/lib/logger/handlers/slogpretty"
 	"url-shortener/internal/lib/logger/sl"
 	"url-shortener/internal/storage/postgres"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -32,7 +30,6 @@ func main() {
 		"starting url-shortener",
 		slog.String("env", cfg.Env),
 	)
-	log.Debug("debug messages are enabled")
 
 	storage, err := postgres.New(cfg.StoragePath)
 	if err != nil {
@@ -40,28 +37,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	//TODO: refactoring on gin
-	router := chi.NewRouter()
+	log.Info(
+		"connecting to PostgreSQL database",
+		slog.String("storage_path", cfg.StoragePath),
+	)
+	
+	gin.SetMode(cfg.GinMode)
+	router := gin.New()
 
-	router.Use(middleware.RequestID)
-	router.Use(mwLogger.New(log))
-	router.Use(middleware.Recoverer)
-	router.Use(middleware.URLFormat)
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
 
-	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Welcome to the URL Shortener!"))
+	router.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "Welcome to the URL Shortener!")
 	})
 
-	router.Route("/url", func(r chi.Router) {
-		r.Use(middleware.BasicAuth("url-shortener", map[string]string{
+	api := router.Group("/api")
+	{
+		api.GET("/:alias", redirect.New(log, storage))
+
+		auth := gin.BasicAuth(gin.Accounts{
 			cfg.HTTPServer.User: cfg.HTTPServer.Password,
-		}))
+		})
 
-		r.Post("/save", save.New(log, storage))
-		r.Delete("/delete", delete.Delete(log, storage))
-	})
-
-	router.Get("/{alias}", redirect.New(log, storage))
+		apiWithAuth := api.Group("/", auth)
+		{
+			apiWithAuth.POST("/save", save.New(log, storage, cfg))
+			apiWithAuth.DELETE("/delete", delete.Delete(log, storage))
+		}
+	}
 
 	log.Info("starting server", slog.String("address", cfg.Address))
 
