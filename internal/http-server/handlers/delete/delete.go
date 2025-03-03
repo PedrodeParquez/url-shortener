@@ -4,23 +4,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"regexp"
+
 	resp "url-shortener/internal/lib/api/response"
 	"url-shortener/internal/lib/logger/sl"
 	"url-shortener/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 )
-
-type Request struct {
-	Alias string `json:"alias" validate:"required,alias"`
-}
-
-type Response struct {
-	resp.Response
-	Message string `json:"message,omitempty"`
-}
 
 //go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=AliasRemover
 type AliasRemover interface {
@@ -31,46 +21,30 @@ func Delete(log *slog.Logger, aliasRemover AliasRemover) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		const op = "handlers.url.delete"
 
+		requestID := c.GetString("request_id")
+		alias := c.Param("alias")
+
 		log = log.With(
 			slog.String("op", op),
-			slog.String("request_id", c.GetHeader("X-Request-Id")),
+			slog.String("request_id", requestID),
+			slog.String("alias", alias),
 		)
 
-		var req Request
-
-		if err := c.ShouldBindJSON(&req); err != nil {
-			log.Error("failed to decode request body", sl.Err(err))
-			c.JSON(http.StatusBadRequest, resp.Error("failed to decode request"))
-			return
-		}
-
-		log.Info("request body decoded", slog.Any("request", req))
-
-		if req.Alias == "" {
+		if alias == "" {
+			log.Error("empty alias in URL")
 			c.JSON(http.StatusBadRequest, resp.Error("invalid request"))
 			return
 		}
 
-		validate := validator.New()
-		validate.RegisterValidation("alias", validateAlias)
-
-		if err := validate.Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
-
-			log.Error("invalid request", sl.Err(err))
-			c.JSON(http.StatusBadRequest, resp.ValidationError(validateErr))
-			return
-		}
-
-		err := aliasRemover.DeleteAlias(req.Alias)
+		err := aliasRemover.DeleteAlias(alias)
 		if errors.Is(err, storage.ErrURLNotFound) {
-			log.Info("alias not found", slog.String("alias", req.Alias))
+			log.Info("alias not found")
 			c.JSON(http.StatusNotFound, resp.Error("alias not found"))
 			return
 		}
 		if errors.Is(err, storage.ErrDBConnection) {
 			log.Error("database connection error", sl.Err(err))
-			c.JSON(http.StatusBadRequest, resp.Error("invalid request"))
+			c.JSON(http.StatusBadRequest, resp.Error("database connection error"))
 			return
 		}
 		if err != nil {
@@ -78,17 +52,12 @@ func Delete(log *slog.Logger, aliasRemover AliasRemover) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, resp.Error("failed to delete alias"))
 			return
 		}
+
 		log.Info("alias deleted")
-		c.JSON(http.StatusOK, Response{
-			Response: resp.OK(),
-			Message:  "alias deleted",
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ok",
+			"message": "alias deleted",
 		})
 	}
-}
-
-func validateAlias(fl validator.FieldLevel) bool {
-	alias := fl.Field().String()
-	regex := `^[a-zA-Z0-9-_]+$`
-	match, _ := regexp.MatchString(regex, alias)
-	return match
 }

@@ -33,13 +33,14 @@ func New(log *slog.Logger, urlSaver URLSaver, cfg *config.Config) gin.HandlerFun
 	return func(c *gin.Context) {
 		const op = "handlers.url.save.New"
 
+		requestID := c.GetString("request_id")
+
 		log = log.With(
 			slog.String("op", op),
-			slog.String("request_id", c.Request.Header.Get("X-Request-Id")),
+			slog.String("request_id", requestID),
 		)
 
 		var req Request
-
 		if err := c.ShouldBindJSON(&req); err != nil {
 			log.Error("failed to decode request body", sl.Err(err))
 			c.JSON(http.StatusBadRequest, resp.Error("failed to decode request"))
@@ -73,7 +74,7 @@ func New(log *slog.Logger, urlSaver URLSaver, cfg *config.Config) gin.HandlerFun
 			return
 		}
 
-		log.Info("url added")
+		log.Info("url added", slog.String("alias", alias))
 
 		c.JSON(http.StatusOK, Response{
 			Response: resp.OK(),

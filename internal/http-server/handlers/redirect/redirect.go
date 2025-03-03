@@ -22,7 +22,7 @@ func New(log *slog.Logger, urlGetter URLGetter) gin.HandlerFunc {
 
 		log = log.With(
 			slog.String("op", op),
-			slog.String("request_id", c.GetHeader("X-Request-Id")),
+			slog.String("request_id", c.GetString("request_id")),
 		)
 
 		alias := c.Param("alias")

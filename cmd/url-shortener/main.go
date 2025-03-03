@@ -8,23 +8,17 @@ import (
 	"url-shortener/internal/http-server/handlers/delete"
 	"url-shortener/internal/http-server/handlers/redirect"
 	"url-shortener/internal/http-server/handlers/save"
-	"url-shortener/internal/lib/logger/handlers/slogpretty"
+	middleware "url-shortener/internal/http-server/middleware/logger"
 	"url-shortener/internal/lib/logger/sl"
 	"url-shortener/internal/storage/postgres"
 
 	"github.com/gin-gonic/gin"
 )
 
-const (
-	envLocal = "local"
-	envDev   = "dev"
-	envProd  = "prod"
-)
-
 func main() {
 	cfg := config.MustLoad()
 
-	log := setupLogger(cfg.Env)
+	log := config.SetupLogger(cfg.Env)
 
 	log.Info(
 		"starting url-shortener",
@@ -41,12 +35,14 @@ func main() {
 		"connecting to PostgreSQL database",
 		slog.String("storage_path", cfg.StoragePath),
 	)
-	
+
 	gin.SetMode(cfg.GinMode)
 	router := gin.New()
 
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+	router.Use(middleware.RequestIDMiddleware())
+	router.Use(middleware.LoggerMiddleware(log))
 
 	router.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "Welcome to the URL Shortener!")
@@ -63,7 +59,7 @@ func main() {
 		apiWithAuth := api.Group("/", auth)
 		{
 			apiWithAuth.POST("/save", save.New(log, storage, cfg))
-			apiWithAuth.DELETE("/delete", delete.Delete(log, storage))
+			apiWithAuth.DELETE("/link/:alias", delete.Delete(log, storage))
 		}
 	}
 
@@ -82,35 +78,4 @@ func main() {
 	}
 
 	log.Error("server stopped")
-}
-
-func setupLogger(env string) *slog.Logger {
-	var log *slog.Logger
-
-	switch env {
-	case envLocal:
-		log = setupPrettySlog()
-	case envDev:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
-		)
-	case envProd:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
-		)
-	}
-
-	return log
-}
-
-func setupPrettySlog() *slog.Logger {
-	opts := slogpretty.PrettyHandlerOptions{
-		SlogOpts: &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		},
-	}
-
-	handler := opts.NewPrettyHandler(os.Stdout)
-
-	return slog.New(handler)
 }
