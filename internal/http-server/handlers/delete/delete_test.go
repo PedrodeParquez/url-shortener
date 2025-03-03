@@ -1,10 +1,7 @@
 package delete_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -50,11 +47,11 @@ func TestDeleteHandler(t *testing.T) {
 			status:    http.StatusInternalServerError,
 		},
 		{
-			name:      "Invalid alias",
-			alias:     "invalid_alias",
-			respError: "invalid request",
-			mockError: storage.ErrDBConnection,
-			status:    http.StatusBadRequest,
+			name:      "Empty alias",
+			alias:     "",
+			respError: "404 page not found",
+			mockError: nil,
+			status:    http.StatusNotFound,
 		},
 	}
 
@@ -65,36 +62,30 @@ func TestDeleteHandler(t *testing.T) {
 			t.Parallel()
 			mockAliasRemover := mocks.NewAliasRemover(t)
 
-			if tc.mockError != nil {
+			if tc.alias != "" && tc.mockError != nil {
 				mockAliasRemover.On("DeleteAlias", tc.alias).Return(tc.mockError).Once()
-			} else {
+			} else if tc.alias != "" {
 				mockAliasRemover.On("DeleteAlias", tc.alias).Return(nil).Once()
 			}
 
 			router := gin.New()
-			router.DELETE("/api/delete", delete.Delete(slogdiscard.NewDiscardLogger(), mockAliasRemover))
+			router.DELETE("/api/link/:alias", delete.Delete(slogdiscard.NewDiscardLogger(), mockAliasRemover))
 
-			input := fmt.Sprintf(`{"alias": "%s"}`, tc.alias)
-			if tc.alias == "" {
-				input = `{}`
+			req, err := http.NewRequest(http.MethodDelete, "/api/link/"+tc.alias, nil)
+			if tc.name == "Empty alias" {
+				req, err = http.NewRequest(http.MethodDelete, "/api/link/", nil)
 			}
-
-			req, err := http.NewRequest(http.MethodDelete, "/api/delete", bytes.NewReader([]byte(input)))
 			require.NoError(t, err)
-			req.Header.Set("Content-Type", "application/json")
 
 			rr := httptest.NewRecorder()
 			router.ServeHTTP(rr, req)
 
 			require.Equal(t, tc.status, rr.Code)
 
-			var resp delete.Response
 			if tc.respError != "" {
-				require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-				require.Equal(t, tc.respError, resp.Error)
+				require.Contains(t, rr.Body.String(), tc.respError)
 			} else {
-				require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-				require.Equal(t, "alias deleted", resp.Message)
+				require.Contains(t, rr.Body.String(), "alias deleted")
 			}
 
 			mockAliasRemover.AssertExpectations(t)
