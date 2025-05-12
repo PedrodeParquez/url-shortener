@@ -39,26 +39,30 @@ func TestURLShortener_HappyPath(t *testing.T) {
 
 func TestURLShortener_SaveRedirect(t *testing.T) {
 	testCases := []struct {
-		name  string
-		url   string
-		alias string
-		error string
+		name       string
+		url        string
+		alias      string
+		error      string
+		statusCode int
 	}{
 		{
-			name:  "Valid URL",
-			url:   gofakeit.URL(),
-			alias: gofakeit.Word() + gofakeit.Word(),
+			name:       "Valid URL",
+			url:        gofakeit.URL(),
+			alias:      gofakeit.Word() + gofakeit.Word(),
+			statusCode: http.StatusOK,
 		},
 		{
-			name:  "Invalid URL",
-			url:   "invalid_url",
-			alias: gofakeit.Word(),
-			error: "field URL is not a valid URL",
+			name:       "Invalid URL",
+			url:        "invalid_url",
+			alias:      gofakeit.Word(),
+			error:      "field URL is not a valid URL",
+			statusCode: http.StatusBadRequest,
 		},
 		{
-			name:  "Empty Alias",
-			url:   gofakeit.URL(),
-			alias: "",
+			name:       "Empty Alias",
+			url:        gofakeit.URL(),
+			alias:      "",
+			statusCode: http.StatusOK,
 		},
 	}
 
@@ -77,28 +81,28 @@ func TestURLShortener_SaveRedirect(t *testing.T) {
 					Alias: tc.alias,
 				}).
 				WithBasicAuth("pedro", "d123").
-				Expect().Status(http.StatusOK).
+				Expect().
+				Status(tc.statusCode).
 				JSON().Object()
 
 			if tc.error != "" {
 				resp.NotContainsKey("alias")
-
 				resp.Value("error").String().IsEqual(tc.error)
-
 				return
 			}
 
-			alias := tc.alias
+			if tc.statusCode == http.StatusOK {
+				alias := tc.alias
 
-			if tc.alias != "" {
-				resp.Value("alias").String().IsEqual(tc.alias)
-			} else {
-				resp.Value("alias").String().NotEmpty()
+				if tc.alias != "" {
+					resp.Value("alias").String().IsEqual(tc.alias)
+				} else {
+					resp.Value("alias").String().NotEmpty()
+					alias = resp.Value("alias").String().Raw()
+				}
 
-				alias = resp.Value("alias").String().Raw()
+				testRedirect(t, alias, tc.url)
 			}
-
-			testRedirect(t, alias, tc.url)
 		})
 	}
 }
@@ -107,7 +111,7 @@ func testRedirect(t *testing.T, alias string, urlToRedirect string) {
 	u := url.URL{
 		Scheme: "http",
 		Host:   host,
-		Path:   alias,
+		Path:   "/api/" + alias,
 	}
 
 	redirectedToURL, err := api.GetRedirect(u.String())
