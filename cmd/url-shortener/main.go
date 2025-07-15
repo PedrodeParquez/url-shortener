@@ -22,7 +22,7 @@ func main() {
 	}
 
 	log.Info("connecting to PostgreSQL database", slog.String("storage_path", cfg.StoragePath))
-	
+
 	router := routes.SetupRouter(log, storage, cfg)
 
 	server.Start(log, cfg, router)

@@ -1,13 +1,8 @@
 # URL Shortener
 
-Сервис сокращения ссылок на Go с использованием Gin, PostgreSQL и современной архитектуры.
+Сервис сокращения ссылок на Go с использованием Gin и PostgreSQL.
 
-## 📋 Требования
-
--   Go 1.21.5+
--   PostgreSQL
-
-## 🛠 Установка и запуск
+## Установка и запуск
 
 1. Клонируйте репозиторий:
 
@@ -32,7 +27,11 @@ CREATE USER name_user WITH PASSWORD 'password';
 4. Настройте переменные окружения:
 
 ```bash
-cp local.env .env
+cp example.env .env
+
+cd config
+
+cp example.yaml .yaml
 ```
 
 5. Запустите сервис:
@@ -41,7 +40,7 @@ cp local.env .env
 go run cmd/url-shortener/main.go
 ```
 
-## 🔌 API Эндпоинты
+## API Эндпоинты
 
 ### 1. Создание короткой ссылки
 
@@ -68,7 +67,7 @@ Authorization: Basic
 GET /api/{alias}
 ```
 
-## 🧪 Тестирование
+## Тестирование
 
 Запуск unit-тестов:
 
@@ -87,7 +86,3 @@ go test -cover ./...
 ```bash
 go test ./internal/config/tests/
 ```
-
-## 📜 Лицензия
-
-Этот проект распространяется под лицензией MIT. Подробности см. в файле `LICENSE`.
