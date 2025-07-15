@@ -1,0 +1,10 @@
+env: 'example'
+storage_path: 'postgres://postgres:12345@localhost:5432/postgres'
+gin_mode: 'debug'
+alias_length: 8
+http_server:
+    address: 'localhost:8080'
+    timeout: 5s
+    idle_timeout: 60s
+    user: 'name'
+    password: 'password'
